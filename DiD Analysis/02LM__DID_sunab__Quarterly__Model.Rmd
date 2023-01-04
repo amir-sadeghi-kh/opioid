@@ -1,0 +1,589 @@
+---
+output: pdf_document
+--- 
+
+```{r, echo=F}
+LawNames <- c("PDMPacs","PDMPreq","PrscLim","PillMill","GdSmrt",
+              "NlxAcs","SttMedExp","ePDMP_Horwitz","ePDMP_PDAPS",
+              "MAPDMP","PDMP_RAND","PDMP_Horwitz_RAND","OPPDMP_RAND",
+              "MAPDMP_RAND","ePDMP_RAND")
+
+Lawdict <- c("PDMPacs" = "PDMP Access",
+             "PDMPreq" = "Mandatory PDMP",
+             "PrscLim" = "Prescription Limitation",
+             "PillMill" = "PillMill",
+             "GdSmrt" = "Godd Smaritan",
+             "NlxAcs" = "Nalxon Access",
+             "SttMedExp" = "State Medical Expansion",
+             "ePDMP_Horwitz" = "Electronic PDMP (Horwitz)",
+             "ePDMP_PDAPS" = "Electronic PDMP (PDAPS)",
+             "MAPDMP" = "Mandatory PDMP",
+             "PDMP_RAND" = "PDMP (RAND)",
+             "PDMP_Horwitz_RAND" = "PDMP (Horwitz)",
+             "OPPDMP_RAND" = "Operational PDMP (RAND)",
+             "MAPDMP_RAND" = "Mandatory PDMP (RAND)",
+             "ePDMP_RAND" = "Electronic PDMP (RAND)")
+
+
+LawNames <- c("PillMill")
+title_var <- LawNames[1]
+```
+
+---
+title: `r title_var`
+---
+
+
+
+<style type="text/css">
+
+body, td {
+   font-size: 14px;
+}
+code.r{
+  font-size: 12px;
+}
+pre {
+  font-size: 20px
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.height = 5, fig.width = 7,fig.pos = "H", out.extra = "")
+pagebreak <- function() {
+  if(knitr::is_latex_output())
+    return("\\newpage")
+  else
+    return('<div style="page-break-before: always;" />')
+}
+```
+
+
+```{r,warning=F, echo=F, message=F, include=F}
+# Required Libraries
+# library(arcos)
+library(stringr)
+library(readr)
+library(dplyr)
+library(sjlabelled)
+library(lubridate)
+library(tidyr)
+library(ggplot2)
+library(ggpubr)
+library(pracma)
+library(gridExtra)
+library(magrittr)
+library(multipanelfigure)
+library(sandwich)
+library(lmtest)
+library(estimatr)
+library(fixest)
+library(data.table)
+library(kableExtra)
+library(stargazer)
+library(rlang)
+```
+
+
+```{r,warning=F, message=F, results='asis', echo=F}
+cat("\n\n\\pagebreak\n")
+```
+
+
+```{r,warning=F, message=F, results='asis', echo=F}
+Ref7 = 1
+
+path <- getwd()
+
+names = c("Dist2DispBuyerState","Dist2DispBuyerHydState",
+          "Dist2DispBuyerOxyState","Dist2DispBuyerFentState",
+          "Dist2DispBuyerPractitionerState","Dist2DispBuyerPharmacyState",
+          "Dist2DispSellerState","Dist2DispSellerHydState",
+          "Dist2DispSellerOxyState",
+          "Man2DistSellerState","Man2DistSellerHydState","Man2DistSellerOxyState")
+names = c("Dist2DispBuyerState",
+          "Dist2DispBuyerPractitionerState",
+          "Dist2DispBuyerRetailPharmacyState","Dist2DispBuyerChainPharmacyState",
+          "Dist2DispSellerState")
+
+
+
+for (ii in names){
+  
+  setwd("G:/My Drive/North Carolina State University/Project - Opioid 3/Data Processed")
+  data <- fread(paste0(ii,".csv"))
+  setwd(path)
+  data <- as.data.frame(data)
+  if (grepl("Buyer",ii)){
+    colnames(data)[which(colnames(data) == "StateBuyer")] <- "State"
+  } else{
+    colnames(data)[which(colnames(data) == "StateSeller")] <- "State"
+  }
+  FirstColumns <- c("TimeID","Year","Quarter","State","StateFIPS",
+                    names(data)[which(grepl("Pop",names(data)))],
+                    names(data)[which(grepl("Dosage",names(data)))],
+                    names(data)[which(grepl("Weight",names(data)))],
+                    names(data)[which(grepl("Quantity",names(data)))],
+                    names(data)[which(grepl("MME",names(data)))])
+  LastColumns <- setdiff(names(data),FirstColumns)
+  data <- data[,c(FirstColumns,LastColumns)]
+  
+  DV <- names(data)[which(grepl("Dosage|Quantity|MME|Weight",names(data)))]
+  DV <- names(data)[which(grepl("Dosage",names(data)))]
+  
+  if (grepl("Buyer",ii)){
+    drug <- c("Hyd","Fent","Oxy")
+    drugdict <- c("Hyd" = "Hydrocodone", "Fent" = "Fentanyl", "Oxy" = "Oxycodone")
+    
+    BusAct <- c("Practitioner","Pharmacy")
+    BusActdict <- c("Practitioner" = "Practitioners", "Pharmacy" = "Pharmacies")
+    
+    tmp1 <- unlist(lapply(drug, function(u) u[grepl(u, ii)]))
+    tmp2 <- unlist(lapply(BusAct, function(u) u[grepl(u, ii)]))
+    
+    
+    if (is_empty(tmp1) & is_empty(tmp2)){
+      DVdict <- c("Dosage" = "all opioid dosage dispensed in a state",
+                  "DosageBoarderBuyer" = "all opioid dosage dispensed in the
+                  boarder counties of a state",
+                  "DosageNonBoarderBuyer" = "all opioid dosage dispensed in the
+                  inland counties of a state",
+                  "DosageInState" = "all opioid dosage bought (by dispensers) from
+                  in-state distributors",
+                  "DosageOutState" = "all opioid dosage bought (by dispensers) from
+                  out-of-state distributors")
+      if (!grepl("Man",ii)) {cat("**Dispenser, All Drugs**")}
+      
+      
+      if (grepl("Man",ii)){
+        DVdict <- c("Dosage" = "all opioid dosage distributed in a state",
+                    "DosageBoarderBuyer" = "all opioid dosage distributed in the
+                  boarder counties of a state",
+                    "DosageNonBoarderBuyer" = "all opioid dosage distributed in the
+                  inland counties of a state",
+                    "DosageInState" = "all opioid dosage bought (by distributors) from
+                  in-state manufacturers",
+                    "DosageOutState" = "all opioid dosage bought (by distributors) from
+                  out-of-state manufacturers")
+        cat("**Distributors (Man), All Drugs**")
+      }
+      
+      
+    } else if (!is_empty(tmp1)) {
+      DVdict <- c("Dosage" = paste0(drugdict[tmp1]," dosage dispensed in a state"),
+                  "DosageBoarderBuyer" = paste0(drugdict[tmp1]," dosage dispensed in the
+                  boarder counties of a state"),
+                  "DosageNonBoarderBuyer" = paste0(drugdict[tmp1]," dosage dispensed in the
+                  inland counties of a state"),
+                  "DosageInState" = paste0(drugdict[tmp1]," dosage bought (by dispensers) from
+                  in-state distributors"),
+                  "DosageOutState" = paste0(drugdict[tmp1]," dosage bought (by dispensers) from
+                  out-of-state distributors"))
+      if (!grepl("Man",ii)) {cat(paste0("**Dispenser, **",tmp1))}
+      
+      if (grepl("Man",ii)){
+        DVdict <- c("Dosage" = paste0(drugdict[tmp1]," dosage distributed in a state"),
+                    "DosageBoarderBuyer" = paste0(drugdict[tmp1]," dosage distributed in the
+                  boarder counties of a state"),
+                    "DosageNonBoarderBuyer" = paste0(drugdict[tmp1]," dosage distributed in the inland counties of a state"),
+                    "DosageInState" = paste0(drugdict[tmp1]," dosage bought (by distributors) from in-state manufacturers"),
+                    "DosageOutState" = paste0(drugdict[tmp1]," dosage bought (by distributors) from out-of-state manufacturers"))
+        cat("**Distributors (Man), **",tmp1)
+      }
+    } else if (!is_empty(tmp2)) {
+      DVdict <- c("Dosage" = paste0("Dosage bought in a state by ",BusActdict[tmp2]),
+                  "DosageBoarderBuyer" = paste0("Dosage bought in boarder counties of a state by ",BusActdict[tmp2]),
+                  "DosageNonBoarderBuyer" = paste0("Dosage bought in inland counties of a state by ",BusActdict[tmp2]),
+                  "DosageInState" = paste0("Dosage bought in a state by ", BusActdict[tmp2], " from in state distributors"),
+                  "DosageOutState" = paste0("Dosage bought in a state by ",BusActdict[tmp2], " from out of state distributors"))
+      cat(paste0("**Dispenser, **",tmp2))
+    }
+  } else if (grepl("Seller",ii)){
+    drug <- c("Hyd","Fent","Oxy")
+    drugdict <- c("Hyd" = "Hydrocodone", "Fent" = "Fentanyl", "Oxy" = "Oxycodone")
+    tmp <- unlist(lapply(drug, function(u) u[grepl(u, ii)]))
+    if (is_empty(tmp)){
+      DVdict <- c("Dosage" = "all opioid dosage ditributed in a state",
+                  "DosageBoarderSeller" = "all opioid dosage ditributed in the
+                  boarder counties of a state",
+                  "DosageNonBoarderSeller" = "all opioid dosage ditributed in the
+                  inland counties of a state",
+                  "DosageInState" = "all opioid dosage sold (distributed) to
+                  in-state dispensers",
+                  "DosageOutState" = "all opioid dosage sold (distributed) to
+                  out-of-state dispensers")
+      if (!grepl("Man",ii)) {cat("**Distributors (Disp), All Drugs**")}
+      
+      if (grepl("Man",ii)){
+        DVdict <- c("Dosage" = "all opioid dosage prodcued in a state",
+                    "DosageBoarderSeller" = "all opioid dosage prodcued in the
+                  boarder counties of a state",
+                    "DosageNonBoarderSeller" = "all opioid dosage prodcued in the
+                  inland counties of a state",
+                    "DosageInState" = "all opioid dosage prodcued (by manufacturers) and sold to in-state distributors",
+                    "DosageOutState" = "all opioid dosage prodcued (by manufacturers) and sold to out-of-state distributors")
+        cat("**Manufacturer, All Drugs**")
+      }
+    } else {
+      DVdict <- c("Dosage" = paste0(drugdict[tmp]," dosage ditributed in a state"),
+                  "DosageBoarderSeller" = paste0(drugdict[tmp]," dosage ditributed in the
+                  boarder counties of a state"),
+                  "DosageNonBoarderSeller" = paste0(drugdict[tmp]," dosage ditributed in the
+                  inland counties of a state"),
+                  "DosageInState" = paste0(drugdict[tmp]," dosage sold (distributed) to
+                  in-state dispensers"),
+                  "DosageOutState" = paste0(drugdict[tmp]," dosage sold (distributed) to
+                  out-of-state dispensers"))
+      if (!grepl("Man",ii)) {cat(paste0("**Distributors (Disp), **",tmp))}
+      
+      
+      if (grepl("Man",ii)){
+        DVdict <- c("Dosage" = paste0(drugdict[tmp]," dosage prodcued in a state"),
+                    "DosageBoarderSeller" = paste0(drugdict[tmp]," dosage prodcued in the
+                  boarder counties of a state"),
+                    "DosageNonBoarderSeller" = paste0(drugdict[tmp]," dosage prodcued in the
+                  inland counties of a state"),
+                    "DosageInState" = paste0(drugdict[tmp]," dosage prodcued (by manufacturers) and sold to in-state distributors"),
+                    "DosageOutState" = paste0(drugdict[tmp]," dosage prodcued (by manufacturers) and sold to out-of-state distributors"))
+        cat("**Manufacturer, **", tmp)
+      }
+      
+      
+    } 
+  }
+  
+  
+  
+  
+  # data[,DV] <- data[,DV] / 1e6
+  data[,"Dosage"] <- data[,"Dosage"] / data[,"Pop"]
+  data[,"DosageInState"] <- data[,"DosageInState"] / data[,"Pop"]
+  data[,"DosageOutState"] <- data[,"DosageOutState"] / data[,"Pop"]
+  if (grepl("Seller",ii)){
+    data[,"DosageBoarderSeller"] <- data[,"DosageBoarderSeller"] / data[,"PopBoarder"]
+    data[,"DosageNonBoarderSeller"] <- data[,"DosageNonBoarderSeller"] / data[,"PopInland"]
+  } else {
+    data[,"DosageBoarderBuyer"] <- data[,"DosageBoarderBuyer"] / data[,"PopBoarder"]
+    data[,"DosageNonBoarderBuyer"] <- data[,"DosageNonBoarderBuyer"] / data[,"PopInland"]
+  }
+  
+  IDV = paste0(LawNames,"_tr")
+  
+  # Always treated units are removed from estimation in Sun and Abb method
+  index <- which(data$State %in% c("AK","HI"))
+  if (!isempty(index)){
+    data <- data[-which(data$State %in% c("AK","HI")),]
+  }
+  idx1 <- which(data[,LawNames] > -13)
+  idx2 <- which(data[,LawNames] < 0)
+  idx <- intersect(idx1,idx2)
+  if (!isempty(idx)){
+    data <- data[-idx,]
+  }
+  
+  LocationLevel = "State"
+  if (grepl("County", ii, fixed = TRUE)){LocationLevel = "County"}
+  if (Ref7 == 1){
+    demnames <- names(data %>% select(Pop:p_unemployed))
+    p_data <- panel(as.data.table(data),~ State+TimeID)
+    for (pp in 1:4){
+      for (cov in demnames){
+        p_data[,paste0(cov,"Lag",toString(pp)) := 
+                 eval(parse(text = (paste0("l(",cov,',',toString(pp),
+                                           ', fill = 0)'))))]
+      }
+    }
+  }
+  
+  cat("\n\n\\pagebreak\n\n")
+  
+  if (Ref7 == 1){
+    data_list = list(p_data)
+  } else {
+    data_list = list(data)
+  }
+  
+  
+  for (jj in 1:length(IDV)){
+    for (kk in 1:length(DV)){
+      for (uu in 1:length(data_list)){
+        if (uu == 2){isFull = "Full"} else{isFull = ""}
+        if (Ref7 == 1){
+          covariates <- c("Pop","p_female","p_white","p_hispanic","p_asian",
+                          "p_college","p_age60up","p_unemployed","p_poverty","p_married","p_bornUS")
+        } else{
+          covariates <- c("PCPVLag1","PCT_MEN","PC_PI","PCT_WHITE","PCT_45T64","PCT_BLACK","OP_VISITS")
+        }
+        covariates <- c(covariates,paste0(covariates,"Lag1"))
+        
+        # if (grepl("Seller",ii)){
+        #   covariates <- c(covariates,paste0(DV[kk],"Lag1"))
+        # }
+        # covariates <- c(covariates,paste0(DV[kk],"Lag1"))
+        
+        form1 <- as.formula(paste0(DV[kk],"~",IDV[jj],
+                                   "+ csw0(",
+                                   paste0(covariates,collapse = '+'),
+                                   ") |",LocationLevel," + TimeID"))
+        form2 <- as.formula(paste0(DV[kk],"~ sunab(",
+                                   LawNames[jj],
+                                   ",TimeID)+ csw0(",
+                                   paste0(covariates,collapse = '+'),
+                                   ") |",LocationLevel," + TimeID"))
+        form3 <- as.formula(paste0(DV[kk],"~ csw0(",
+                                   paste0(covariates,collapse = '+'),
+                                   ") + i(",LawNames[jj],"_time,",
+                                   "ref = c(-1,-10000))|",
+                                   LocationLevel,"+ TimeID"))
+        
+        
+        setFixest_estimation(panel.id = as.formula(paste0("~",LocationLevel,"+TimeID")))
+        # setFixest_estimation(reset = TRUE)
+        model = feols(form1, data_list[[uu]])
+        res_sa20 = feols(form2,data_list[[uu]],  "cluster")
+        res_twfe = feols(form3, data_list[[uu]], "cluster")
+        res_sa20Summ <- summary(res_sa20, agg = "att")
+        res_sa20Pval <- res_sa20Summ[[1]]$coeftable[4]
+        res_sa20PvalCov <- res_sa20Summ[[2]]$coeftable[1,4]
+        
+        myDict = c("TimeID" = "Quarter")
+        myDict[IDV[jj]] <- "ATT"
+        
+        a <- etable(res_sa20Summ,summary(model), tex = T, drop = covariates, dict = myDict, fitstat = ~ r2 + n, digits = 2,
+               title = paste0("Effect of ", Lawdict[LawNames[jj]], " on ", DVdict[DV[kk]]), 
+               headers=list("_Model" = list("Sun & Abb" = 2,"TWFE" = 2), "_Covariate" = list("No","Yes","No","Yes")))
+        
+        print(a)
+        
+        
+        
+        if (grepl("Buyer",ii)){
+          subtiltle_phrase = "Data: Buyer"
+        } else if (grepl("Dist",ii)){
+          subtiltle_phrase = "Data: Distributor"
+        } else if (grepl("Man",ii)){
+          subtiltle_phrase = "Data: Manufacturer"
+        }
+        
+        if (grepl("State",ii)){
+          subtiltle_phrase = paste0(subtiltle_phrase,", Level: State")
+        } else if (grepl("County",ii)){
+          subtiltle_phrase = paste0(subtiltle_phrase,", Level: County")
+        }
+        
+        subtiltle_phrase = paste0(subtiltle_phrase,",\nPolicy: ",LawNames[jj])
+        if (grepl("Hyd",ii)){
+          subtiltle_phrase = paste0(subtiltle_phrase,",\nDrug: Hydrocodone")
+        } else if (grepl("Oxy",ii)){
+          subtiltle_phrase = paste0(subtiltle_phrase,",\nDrug: Oxycodone")
+        } else{
+          subtiltle_phrase = paste0(subtiltle_phrase,",\nDrug: All")
+        }
+        
+        subtiltle_phrase = paste0(subtiltle_phrase,",\n",DV[kk])
+        
+        
+        
+        
+        coef <- res_sa20[[1]]$coeftable
+        coef <- as.data.frame(coef)
+        coef <- coef[grepl("TimeID",rownames(coef),fixed = T),]
+        coef[,"isSig"] <- ifelse(coef[,4] <= 0.05,"Sig","InSig")
+        coef[,"Effect"] <- ifelse(coef[,"Estimate"] <= 0,"negative","positive")
+        coef[,"Time"] <- parse_number(rownames(coef))
+        coef[,"Effect"][which(coef[,"Time"] == -1)] <- "refrence"
+        colnames(coef)[which(names(coef) == "Std. Error")] <- "SE"
+        coef[,"OveralEffect"] <- ifelse(res_sa20Pval <= 0.1,1,0)
+        coef[,"EstimateMeta"] <- res_sa20Summ[[1]]$coeftable["ATT",1]
+        coef[,"SEMeta"] <- res_sa20Summ[[1]]$coeftable["ATT",2]
+        coef[,"t value Meta"] <- res_sa20Summ[[1]]$coeftable["ATT",3]
+        coef[,"Pr(>|t|) Meta"] <- res_sa20Summ[[1]]$coeftable["ATT",4]
+        
+        
+        
+        
+        fig1 <- ggplot(coef[which(-8 <= coef$Time & coef$Time < 20 & coef$Time != -3),],
+                       aes(x = Time,y = Estimate, ymin = Estimate - 1.96*SE, ymax= Estimate + 1.96*SE,
+                           color = Effect, linetype = isSig, fill = OveralEffect)) +
+          geom_pointrange(aes(alpha=isSig))+
+          scale_alpha_manual(values=c('Sig'=1,'InSig'=0.5)) +
+          scale_color_manual(values=c('positive'='blue','negative'='red','reference'='black'))+
+          geom_ribbon(color='gray',fill = 'gray', alpha=0.2,linetype='solid')+
+          scale_linetype_manual(values=c('Sig'='solid','InSig'='dotted'))+
+          geom_hline(yintercept = 0, lty=2) +
+          geom_vline(xintercept=0,linetype='dotted')+
+          theme_pubr() +
+          theme(axis.title.y = element_text(size=9))+
+          guides(alpha=FALSE,
+                 fill=guide_legend(title=NULL),
+                 color=guide_legend(title=NULL),
+                 linetype=FALSE)+
+          labs(y= "ATT",
+               x='Quarters before and after policy',
+               subtitle = "(1)")
+        theme(plot.subtitle = element_text(hjust = 0.5))
+        
+        
+        coef <- res_sa20[[2]]$coeftable
+        coef <- as.data.frame(coef)
+        coef <- coef[grepl("TimeID",rownames(coef),fixed = T),]
+        coef[,"isSig"] <- ifelse(coef[,4] <= 0.05,"Sig","InSig")
+        coef[,"Effect"] <- ifelse(coef[,"Estimate"] <= 0,"negative","positive")
+        coef[,"Time"] <- parse_number(rownames(coef))
+        coef[,"Effect"][which(coef[,"Time"] == -1)] <- "refrence"
+        coef[,"OveralEffect"] <- ifelse(res_sa20PvalCov <= 0.1,1,0)
+        colnames(coef)[which(names(coef) == "Std. Error")] <- "SE"
+        coef[,"EstimateMeta"] <- res_sa20Summ[[2]]$coeftable["ATT",1]
+        coef[,"SEMeta"] <- res_sa20Summ[[2]]$coeftable["ATT",2]
+        coef[,"t value Meta"] <- res_sa20Summ[[2]]$coeftable["ATT",3]
+        coef[,"Pr(>|t|) Meta"] <- res_sa20Summ[[2]]$coeftable["ATT",4]
+        
+        setwd("G:/My Drive/North Carolina State University/Project - Opioid 3/Data Processed 2")
+        fwrite(coef, file = paste0(ii,'__',LawNames[jj],'__',DV[kk],'SA.csv'), row.names = T)
+        
+        fig2 <- ggplot(coef[which(-8 <= coef$Time & coef$Time < 20 & coef$Time != -3),],
+                       aes(x = Time,y = Estimate, ymin = Estimate - 1.96*SE, ymax= Estimate + 1.96*SE,
+                           color = Effect, linetype = isSig)) +
+          # ylim(min(coef$Estimate[which(-4 <= coef$Time & coef$Time < 20)]), max(coef$Estimate[which(-4 <= coef$Time & coef$Time < 20)])) +
+          geom_pointrange(aes(alpha=isSig))+
+          scale_alpha_manual(values=c('Sig'=1,'InSig'=0.5)) +
+          scale_color_manual(values=c('positive'='blue','negative'='red','reference'='black'))+
+          geom_ribbon(color='gray',fill = ifelse(res_sa20PvalCov <= 0.1,"black","gray") ,alpha=0.2,linetype='solid')+
+          scale_linetype_manual(values=c('Sig'='solid','InSig'='dotted'))+
+          geom_hline(yintercept = 0, lty=2) +
+          geom_vline(xintercept=0,linetype='dotted')+
+          theme_pubr() +
+          theme(axis.title.y = element_text(size=9))+
+          guides(alpha=FALSE,
+                 fill=guide_legend(title=NULL),
+                 color=guide_legend(title=NULL),
+                 linetype=FALSE)+
+          labs(y= "ATT",
+               x='Quarters before and after policy',
+               subtitle = "(2)") +
+          theme(plot.subtitle = element_text(hjust = 0.5))
+        
+        
+        
+        fig2b <- ggplot(coef[which(-8 <= coef$Time & coef$Time < 20 & coef$Time != -3),],
+                        aes(x = Time,y = Estimate, ymin = Estimate - 1.96*SE, ymax= Estimate + 1.96*SE,
+                            color = Effect, linetype = isSig)) +
+          # ylim(min(coef$Estimate[which(-4 <= coef$Time & coef$Time < 20)]), max(coef$Estimate[which(-4 <= coef$Time & coef$Time < 20)])) +
+          geom_pointrange(aes(alpha=isSig))+
+          scale_alpha_manual(values=c('Sig'=1,'InSig'=0.5)) +
+          scale_color_manual(values=c('positive'='blue','negative'='red','reference'='black'))+
+          geom_ribbon(color='gray',fill = ifelse(res_sa20PvalCov <= 0.1,"black","gray") ,alpha=0.2,linetype='solid')+
+          scale_linetype_manual(values=c('Sig'='solid','InSig'='dotted'))+
+          geom_hline(yintercept = 0, lty=2) +
+          geom_vline(xintercept=0,linetype='dotted')+
+          theme_pubr() +
+          theme(axis.title.y = element_text(size=9))+
+          guides(alpha=FALSE,
+                 fill=guide_legend(title=NULL),
+                 color=guide_legend(title=NULL),
+                 linetype=FALSE)+
+          labs(y= "ATT",
+               x='Quarters before and after policy',
+               subtitle = DVdict[DV[kk]]) +
+          theme(plot.subtitle = element_text(hjust = 0.5))
+        
+        
+        
+        coef <- res_twfe[[1]]$coeftable
+        coef <- as.data.frame(coef)
+        coef <- coef[grepl("time",rownames(coef),fixed = T),]
+        coef[,"isSig"] <- ifelse(coef[,4] <= 0.05,"Sig","InSig")
+        coef[,"Effect"] <- ifelse(coef[,"Estimate"] <= 0,"negative","positive")
+        coef[,"Time"] <- parse_number(rownames(coef))
+        coef[,"Effect"][which(coef[,"Time"] == -1)] <- "refrence"
+        colnames(coef)[which(names(coef) == "Std. Error")] <- "SE"
+        # coef[,"EstimateMeta"] <- res_sa20Summ[[1]]$coeftable["ATT",1]
+        # coef[,"SEMeta"] <- res_sa20Summ[[1]]$coeftable["ATT",2]
+        # coef[,"t value Meta"] <- res_sa20Summ[[1]]$coeftable["ATT",3]
+        # coef[,"Pr(>|t|) Meta"] <- res_sa20Summ[[1]]$coeftable["ATT",4]        
+        
+        
+        fig3 <- ggplot(coef[which(-8 <= coef$Time & coef$Time < 20 & coef$Time != -3),],
+                       aes(x = Time,y = Estimate, ymin = Estimate - 1.96*SE, ymax= Estimate + 1.96*SE,
+                           color = Effect, linetype = isSig)) +
+          geom_pointrange(aes(alpha=isSig))+
+          scale_alpha_manual(values=c('Sig'=1,'InSig'=0.5)) +
+          scale_color_manual(values=c('positive'='blue','negative'='red','reference'='black'))+
+          geom_ribbon(color='gray',fill='gray',alpha=0.2,linetype='solid')+
+          scale_linetype_manual(values=c('Sig'='solid','InSig'='dotted'))+
+          geom_hline(yintercept = 0, lty=2) +
+          geom_vline(xintercept=0,linetype='dotted')+
+          theme_pubr() +
+          theme(axis.title.y = element_text(size=9))+
+          guides(alpha=FALSE,
+                 fill=guide_legend(title=NULL),
+                 color=guide_legend(title=NULL),
+                 linetype=FALSE)+
+          labs(y= "ATT",
+               x='Quarters before and after policy change',
+               subtitle = "(3)")
+        theme(plot.subtitle = element_text(hjust = 0.5))
+        
+        coef <- res_twfe[[2]]$coeftable
+        coef <- as.data.frame(coef)
+        coef <- coef[grepl("time",rownames(coef),fixed = T),]
+        coef[,"isSig"] <- ifelse(coef[,4] <= 0.05,"Sig","InSig")
+        coef[,"Effect"] <- ifelse(coef[,"Estimate"] <= 0,"negative","positive")
+        coef[,"Time"] <- parse_number(rownames(coef))
+        coef[,"Effect"][which(coef[,"Time"] == -1)] <- "refrence"
+        colnames(coef)[which(names(coef) == "Std. Error")] <- "SE"
+        # coef[,"EstimateMeta"] <- res_sa20Summ[[1]]$coeftable["ATT",1]
+        # coef[,"SEMeta"] <- res_sa20Summ[[1]]$coeftable["ATT",2]
+        # coef[,"t value Meta"] <- res_sa20Summ[[1]]$coeftable["ATT",3]
+        # coef[,"Pr(>|t|) Meta"] <- res_sa20Summ[[1]]$coeftable["ATT",4]        
+        
+        
+        fig4 <- ggplot(coef[which(-8 <= coef$Time & coef$Time < 20 & coef$Time != -3),],
+                       aes(x = Time,y = Estimate, ymin = Estimate - 1.96*SE, ymax= Estimate + 1.96*SE,
+                           color = Effect, linetype = isSig)) +
+          geom_pointrange(aes(alpha=isSig))+
+          scale_alpha_manual(values=c('Sig'=1,'InSig'=0.5)) +
+          scale_color_manual(values=c('positive'='blue','negative'='red','reference'='black'))+
+          geom_ribbon(color='gray',fill='gray',alpha=0.2,linetype='solid')+
+          scale_linetype_manual(values=c('Sig'='solid','InSig'='dotted'))+
+          geom_hline(yintercept = 0, lty=2) +
+          geom_vline(xintercept=0,linetype='dotted')+
+          theme_pubr() +
+          theme(axis.title.y = element_text(size=9))+
+          guides(alpha=FALSE,
+                 fill=guide_legend(title=NULL),
+                 color=guide_legend(title=NULL),
+                 linetype=FALSE)+
+          labs(y= "ATT",
+               x='Quarters before and after policy change',
+               subtitle = "(4)")
+        theme(plot.subtitle = element_text(hjust = 0.5))
+        
+        
+        # grid.arrange(fig1,fig2,fig3,fig4,nrow=2)
+        # grid.arrange(fig1,fig2,nrow=1)
+        # ggsave(file.path(path,paste0(ii,'__',LawNames[jj],'__',DV[kk],'__TWFE','.png')),grid.arrange(fig3,fig4,nrow=1), width=6,height=7,dpi=500)
+        
+        path <- getwd()
+        # ggsave(file.path(path,"Plots",paste0(ii,'__',LawNames[jj],'__',DV[kk],'.png')),
+        #        grid.arrange(fig1,fig2,fig3,fig4,nrow=2))
+        grid.arrange(fig1,fig2,fig3,fig4,nrow=2)
+        setwd("G:/My Drive/North Carolina State University/Project - Opioid 3/Data Processed 2")
+        ggsave(paste0(ii,'__',LawNames[jj],'__',DV[kk],'SA__WithCov.png'),fig2b)
+        
+        
+        cat("\n\n\\pagebreak\n\n")
+      }
+    }
+  } 
+}
+```
+
+
+
+
+
+
+
+
+

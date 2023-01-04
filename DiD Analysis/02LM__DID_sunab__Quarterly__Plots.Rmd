@@ -1,0 +1,192 @@
+
+---
+output: pdf_document
+--- 
+
+
+---
+title: A
+---
+
+
+
+<style type="text/css">
+
+body, td {
+   font-size: 14px;
+}
+code.r{
+  font-size: 12px;
+}
+pre {
+  font-size: 20px
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.height = 5, fig.width = 7,fig.pos = "H", out.extra = "")
+pagebreak <- function() {
+  if(knitr::is_latex_output())
+    return("\\newpage")
+  else
+    return('<div style="page-break-before: always;" />')
+}
+```
+
+
+```{r,warning=F, echo=F, message=F, include=FALSE}
+# Required Libraries
+# library(arcos)
+library(stringr)
+library(readr)
+library(dplyr)
+library(sjlabelled)
+library(lubridate)
+library(tidyr)
+library(ggplot2)
+library(ggpubr)
+library(pracma)
+library(gridExtra)
+library(magrittr)
+library(multipanelfigure)
+library(sandwich)
+library(lmtest)
+library(estimatr)
+library(fixest)
+library(data.table)
+library(kableExtra)
+library(stargazer)
+library(rlang)
+```
+
+
+
+
+
+```{r,warning=F, message=F, results='asis', echo=F}
+LawNames <- c("OPPDMP_RAND","ePDMP_RAND","PillMill")
+#LawNames <- c("PDMP_RAND","OPPDMP_RAND","ePDMP_RAND")
+
+Lawdict <- c(`PDMPacs` = "PDMP Access",
+             `PDMPreq` = "Mandatory PDMP",
+             `PrscLim` = "Prescription Limitation",
+             `PillMill` = "PillMill",
+             `GdSmrt` = "Godd Smaritan",
+             `NlxAcs` = "Nalxon Access",
+             `SttMedExp` = "State Medical Expansion",
+             `ePDMP_Horwitz` = "Electronic PDMP (Horwitz)",
+             `ePDMP_PDAPS` = "Electronic PDMP (PDAPS)",
+             `MAPDMP` = "Mandatory PDMP",
+             `PDMP_RAND` = "PDMP",
+             `PDMP_Horwitz_RAND` = "PDMP (Horwitz)",
+             `OPPDMP_RAND` = "Operational PDMP",
+             `MAPDMP_RAND`= "Mandatory PDMP",
+             `ePDMP_RAND` = "Electronic PDMP")
+
+names = c("Dist2DispBuyerState","Dist2DispBuyerHydState",
+          "Dist2DispBuyerOxyState","Dist2DispBuyerFentState",
+          "Dist2DispBuyerPractitionerState","Dist2DispBuyerPharmacyState",
+          "Dist2DispSellerState","Dist2DispSellerHydState",
+          "Dist2DispSellerOxyState",
+          "Man2DistSellerState","Man2DistSellerHydState","Man2DistSellerOxyState")
+
+names = c("Dist2DispBuyerState",
+          "Dist2DispBuyerPractitionerState",
+          "Dist2DispBuyerRetailPharmacyState","Dist2DispBuyerChainPharmacyState",
+          "Dist2DispSellerState")
+
+
+IDV = paste0(LawNames,"_tr")
+path <- getwd()
+
+figlist <- list()
+
+for (ii in names){
+  if (grepl("Seller",ii)){
+    DV <- c("Dosage" ,"DosageInState","DosageOutState")
+  } else {
+    #DV <- c("Dosage","DosageBoarderBuyer","DosageNonBoarderBuyer" ,"DosageInState","DosageOutState")
+    DV <- c("Dosage" ,"DosageInState","DosageOutState")
+  }
+  DVdict <- c(`Dosage` = "PCPV",
+              `DosageBoarderBuyer` = "Boarder PCPV",
+              `DosageNonBoarderBuyer` = "Inland PCPV",
+              `DosageInState` = "In-State PCPV",
+              `DosageOutState` = "Out-of-State PCPV")
+  
+  
+  count = 1
+  coef = data.table()
+  for (jj in 1:length(DV)){
+      for (kk in 1:length(IDV)){
+        setwd("G:/My Drive/North Carolina State University/Project - Opioid 3/Data Processed 2")
+        tmp <- fread(paste0(ii,'__',LawNames[kk],'__',DV[jj],'SA.csv'), header = T)
+        setwd(path)
+        rownames(coef) <- coef$V1
+        tmp$V1 <- NULL
+        tmp[,"DV"] <- DV[jj]
+        tmp[,"IDV"] <- LawNames[kk]
+        
+        coef <- rbind(coef,tmp)
+    }
+  }
+  setnames(coef, old = c('Pr(>|t|)','Pr(>|t|) Meta'), new = c('Pval','PvalMeta'))
+  coef[, isSigMeta := 'InSig']
+  coef[which(PvalMeta < 0.1 & EstimateMeta > 0), isSigMeta := 'SigPos']
+  coef[which(PvalMeta < 0.1 & EstimateMeta < 0), isSigMeta := 'SigNeg']
+  coef[which(PvalMeta > 0.1), isSigMeta := 'InSig']
+  coef[,EffectMeta := ifelse(EstimateMeta > 0, 'positive','gray50')]
+  coef[, EffectMean := paste0('Avg. = ',round(EstimateMeta,3))]
+  PvalMeta = coef[,PvalMeta]
+  coef[,ColorMeta := ifelse(isSigMeta == 'Sig', 'gray5','gray80')]
+  # coef$DV <- factor(coef$DV, levels = c("Dosage", "DosageBoarderBuyer", "DosageNonBoarderBuyer", "DosageInState",  "DosageOutState"))
+  # coef$IDV <- factor(coef$IDV, levels = c("PDMP_RAND", "OPPDMP_RAND", "ePDMP_RAND", "PillMill"))
+  
+  coef = coef[which(-8 <= coef$Time & coef$Time < 20 & coef$Time != -3),]
+  
+  fig <- ggplot(coef,aes(x = Time,y = Estimate, ymin = Estimate - 1.96*SE,
+                ymax= Estimate + 1.96*SE,
+                color = Effect, linetype = isSig)) +
+        facet_grid(DV ~ IDV ,scale='free_y',switch = "y",labeller = labeller(DV = DVdict, IDV = Lawdict))+
+        # ylim(min(coef$Estimate[which(-4 <= coef$Time & coef$Time < 20)]), max(coef$Estimate[which(-4 <= coef$Time & coef$Time < 20)])) +
+        geom_pointrange(aes(alpha=isSig), size = 0.1)+
+        scale_alpha_manual(values=c('Sig'=1,'InSig'=0.5)) +
+        scale_color_manual(values=c('positive'='blue','negative'='red','reference'='black'))+
+        scale_fill_manual(values = c('SigPos'='royalblue1','SigNeg'='firebrick1','InSig'='white'))+
+        scale_linetype_manual(values=c('Sig'='solid','InSig'='dotted'))+
+        geom_ribbon(color='gray' ,alpha=0.2,linetype='solid')+
+        geom_rect(aes(fill = isSigMeta),xmin = -Inf,xmax = Inf,ymin = -Inf,ymax = Inf,alpha = 0.01) +
+        geom_hline(yintercept = 0, lty=2) +
+        geom_vline(xintercept=0,linetype='dotted')+
+        theme_pubr() +
+        theme(axis.title.y = element_text(size=9))+
+        guides(alpha=FALSE,
+               fill=guide_legend(title=NULL),
+               color=guide_legend(title=NULL),
+               linetype=FALSE)+
+        labs(y= "ATT",
+             x='Quarters before and after policy') +
+        theme(plot.subtitle = element_text(hjust = 0.5)) +
+        theme(strip.text.x = element_text(size = 6),strip.text.y = element_text(size = 6),
+              axis.text = element_text(size = 6)) +
+        scale_x_continuous(n.breaks = 3) +
+        theme(legend.position='none') + 
+        geom_text(aes(x=min(Time) , y = 1.2*max(Estimate), label = coef$EffectMean),
+                  color='black', size= 2, hjust="left",
+                  family = "Times New Roman (Headings CS)")
+  setwd("G:/My Drive/North Carolina State University/Project - Opioid 3/Result")
+  ggsave(paste0(ii,'.png'),fig)
+  setwd(path)
+          
+} 
+
+```
+
+
+
+
+
+
+
+
+
