@@ -23,7 +23,10 @@ To get started, clone the repository and follow the instructions in each project
 git clone https://github.com/amir-sadeghi-kh/opioid
 ```
 
-### Cite our work
+### Cite Our Work
+
+To cite our work in LaTeX, you can use BibTeX below:
+
 ```bash
 @inproceedings{sahebi2023evaluating,
   title={Evaluating state-level prescription drug monitoring program (PDMP) and pill mill effects on opioid consumption in pharmaceutical supply chain},
