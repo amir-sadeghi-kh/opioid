@@ -23,7 +23,7 @@ To get started, clone the repository and follow the instructions in each project
 git clone https://github.com/amir-sadeghi-kh/opioid
 ```
 
-### Cite Our Work
+## Cite Our Work
 
 To cite our work in LaTeX, you can use BibTeX below:
 
