@@ -21,6 +21,7 @@ To get started, clone the repository and follow the instructions in each project
 
 ```bash
 git clone https://github.com/amir-sadeghi-kh/opioid
+```
 
 ### Cite our work
 ```bash
@@ -57,4 +58,4 @@ git clone https://github.com/amir-sadeghi-kh/opioid
   title={The Effect of Opioid Legislation on Supply Chain Stakeholders’ Behavior: South Carolina Case Study},
   author={Sadeghi, AH and Sahebi-fakhrabad, A and Handfield, R}
 }
-
+```
