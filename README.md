@@ -20,5 +20,5 @@ This repository includes:
 To get started, clone the repository and follow the instructions in each project's folder.
 
 ```bash
-git clone [[repository URL]](https://github.com/amir-sadeghi-kh/opioid)
+git clone (https://github.com/amir-sadeghi-kh/opioid)
 
